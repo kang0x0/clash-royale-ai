@@ -1,5 +1,5 @@
 # 皇室战争自动化助手
-基于Python计算机视觉和ADB的《皇室战争》智能自动对战助手，通过模拟器，实现自动对战等功能，用于卡牌大师、奖牌获取。
+基于Python计算机视觉和ADB的《皇室战争》自动对战助手，通过模拟器，实现自动对战等功能，用于卡牌大师、奖牌获取。
 ---------------------------------
 🏰 Clash Royale Robot - 皇室战争自动对战助手    
 [![Python Version](https://img.shields.io/badge/Python-3.9%2B-blue.svg)](https://www.python.org/)
