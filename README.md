@@ -56,11 +56,7 @@
 
     使用VS code中的conda创建虚拟Python环境
 
-4. **ADB连接验证**
-   ```bash
-    adb devices
-
-5. **首次运行**
+4. **首次运行**
    ```bash
    python robot.py
    ```
