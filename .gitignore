@@ -1,0 +1,12 @@
+# 虚拟环境
+myenv/
+*.pyc
+
+# IDE相关
+.vscode/
+*.swp
+*.swo
+
+# 临时文件
+modle_result/
+tests/
