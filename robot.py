@@ -16,7 +16,7 @@ class Robot:
             default_threshold (float): 默认匹配阈值
             default_min_scale (float): 默认最小缩放比例
             default_max_scale (float): 默认最大缩放比例
-            battle_mode (str): 对战模式，"single" 为单人模式，"double" 为双人模式
+            battle_mode (str): 对战模式，"single" 为单人模式，"double" 为双人模式，"defense" 为保卫模式
             wait_time (int): 等待对战开始的时间（秒）
             max_cards (int): 最大释放卡牌次数
         """
@@ -28,6 +28,7 @@ class Robot:
         self.max_cards = max_cards
         self.screenshot_path = "screen.png"
         self.result_dir = "modle_result"
+        self.cards_played_in_battle = 0  # 添加这一行，用于统计每场对战释放的卡牌数
         
         # 定义4个卡牌的位置 (x, y)
         # 这些坐标需要根据实际游戏界面进行调整
@@ -38,6 +39,16 @@ class Robot:
             (476, 890)    # 卡牌4位置
         ]
         
+        # 根据不同模式设置不同的放置区域
+        self.drop_areas = {
+            "single": (51, 458, 495, 594),      # 中间区域
+            "double": (51, 458, 495, 594),       # 中间长条区域
+            "defense": (246, 570, 296, 607)       # 上方长条区域（保卫模式专用）
+        }
+        
+        # 设置默认放置区域
+        self.drop_area = self.drop_areas.get(self.battle_mode, self.drop_areas["single"])
+
         # 定义卡牌释放的目标区域 (x1, y1, x2, y2)
         # 这是一个矩形区域，卡牌将在该区域内随机释放
         # self.drop_area = (246, 570, 296, 607)  # 中间区域
@@ -46,9 +57,7 @@ class Robot:
 
         # self.drop_area = (47, 456, 451, 488) # 上方长条区域
 
-        # self.drop_area = (47, 458, 489, 710) # 全部区域
-
-        self.drop_area = (51, 458, 495, 594) # 上半区域
+        # self.drop_area = (51, 458, 495, 594) # 上半区域
         # 确保结果目录存在
         if not os.path.exists(self.result_dir):
             os.makedirs(self.result_dir)
@@ -324,6 +333,7 @@ class Robot:
             bool: 对战是否成功完成
         """
         print("开始对战循环...")
+        self.cards_played_in_battle = 0  # 重置计数器
         
         for i in range(self.max_cards):
 
@@ -343,10 +353,15 @@ class Robot:
             if not self.play_random_card():
                 print("释放卡牌失败")
                 continue
+
+            self.cards_played_in_battle = i + 1  # 更新已释放卡牌数
             
             # 卡牌释放间隔
             if self.battle_mode == "double":
                 time.sleep(6)
+            elif self.battle_mode == "defense":
+                # 保卫模式使用固定较短的间隔时间
+                time.sleep(2)
             else:
                 # 单人模式使用1-10秒的正态分布随机等待时间
                 # 使用均值为5.5，标准差为1.5的正态分布，然后限制在1-10范围内
@@ -408,10 +423,19 @@ class Robot:
 if __name__ == "__main__":
 
 
-    # 设置对战模式，"single" 为单人模式，"double" 为双人模式
-    battle_mode = "single"  # 可以根据需要修改为 "single" 或 "double"
-    wait_time = 20 if battle_mode == "double" else 10
-    max_cards = 60 if battle_mode == "double" else 60
+    # 设置对战模式，"single" 为单人模式，"double" 为双人模式，"defense" 为保卫模式
+    battle_mode = "single"  # 可以根据需要修改为 "single"、"double" 或 "defense"
+    
+    # 根据模式设置不同的参数
+    if battle_mode == "double":
+        wait_time = 20
+        max_cards = 60
+    elif battle_mode == "defense":
+        wait_time = 10
+        max_cards = 60
+    else:  # single mode
+        wait_time = 10
+        max_cards = 60
 
     # 创建机器人实例
     robot = Robot(battle_mode=battle_mode, wait_time=wait_time, max_cards=max_cards)
@@ -419,6 +443,9 @@ if __name__ == "__main__":
     # 添加统计信息
     battle_count = 1  # 对战次数
     start_time = time.time()  # 开始时间
+    total_cards_played = 0  # 总卡牌释放数
+    successful_battles = 0  # 成功对战次数
+
 
     # 自动对战循环
     try:
@@ -426,29 +453,65 @@ if __name__ == "__main__":
             print(f"\n{'='*50}")
             print(f"开始第 {battle_count} 次对战")
             print(f"{'='*50}")
-            # 点击主界面
-            robot.click_template("modle/Battle_Interface3.png")
-            time.sleep(3)
-            if robot.auto_battle(check_end_after=10):
+            if battle_mode == "single":
+                # 点击主界面
+                robot.click_template("modle/Battle_Interface3.png")
+                time.sleep(3)
+
+            # 计算动态 check_end_after 值（基于历史平均值）
+            if successful_battles > 0:
+                avg_cards = total_cards_played / successful_battles
+                check_end_after = max(5, int(avg_cards * 0.7))  # 使用平均值的70%作为检查点
+                print(f"基于历史数据，check_end_after 设置为: {check_end_after}")
+            else:
+                check_end_after = 10  # 默认值
+
+            if robot.auto_battle(check_end_after=check_end_after):
                 battle_count += 1
-                print("完成一次对战，8秒后开始新的对战...")
+                successful_battles += 1
+                total_cards_played += robot.cards_played_in_battle  # 累加卡牌数
+                avg_cards = total_cards_played / successful_battles
+                print(f"完成一次对战，本次释放 {robot.cards_played_in_battle} 张卡牌")
+                print(f"平均释放卡牌数: {avg_cards:.2f}")
+                print("8秒后开始新的对战...")
                 time.sleep(8)
             else:
                 print("对战失败，尝试返回主界面...")
                 # 对战按钮识别失败后，识别并点击Battle_Interface图像返回主界面
-                if robot.click_template("modle/Battle_Interface.png") or robot.click_template("modle/Battle_Interface2.png", need_capture=False) or robot.click_template("modle/Reward.png", delay_after=4, click_count=6, need_capture=False):
+                if robot.click_template("modle/Battle_Interface.png"):
                     print("已点击Battle_Interface图像，返回主界面")
+                    continue
+                
+                if robot.click_template("modle/Battle_Interface2.png", need_capture=False):
+                    print("已点击Battle_Interface2图像，返回主界面")  
+                    continue
+                
+                if robot.click_template("modle/Reward.png", delay_after=4, click_count=6, need_capture=False):
+                    print("已点击Reward图像，返回主界面")
+                    continue
+
+                if robot.click_template("modle/Return_to_game.png", delay_after=4, need_capture=False):
+                    print("已点击Return_to_game图像，返回主界面")
+                    continue
+
+                if robot.click_template("modle/close.png", need_capture=False):
+                    print("已点击close图像，返回主界面")
+                    continue
                 else:
-                    break
-                time.sleep(8)
+                    break  # 如果都无法返回主界面，则退出循环
+
     except KeyboardInterrupt:
         print("程序已手动终止")
     finally:
         # 输出最终统计信息
         elapsed_time = time.time() - start_time
+        avg_cards_final = total_cards_played / successful_battles if successful_battles > 0 else 0
         print(f"\n{'='*50}")
         print(f"程序运行结束，最终统计信息:")
         print(f"总对战次数: {battle_count}")
+        print(f"成功对战次数: {successful_battles}")
+        print(f"总卡牌释放数: {total_cards_played}")
+        print(f"平均每次对战释放卡牌数: {avg_cards_final:.2f}")
         print(f"总运行时间: {int(elapsed_time//3600)}小时 {int((elapsed_time%3600)//60)}分钟 {int(elapsed_time%60)}秒")
         print(f"{'='*50}")
     
