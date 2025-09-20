@@ -29,6 +29,11 @@ class Robot:
         self.screenshot_path = "screen.png"
         self.result_dir = "modle_result"
         self.cards_played_in_battle = 0  # 添加这一行，用于统计每场对战释放的卡牌数
+
+        self.battle_count = 1  # 对战次数
+        self.start_time = time.time()  # 开始时间
+        self.total_cards_played = 0  # 总卡牌释放数
+        self.successful_battles = 0  # 成功对战次数
         
         # 定义4个卡牌的位置 (x, y)
         # 这些坐标需要根据实际游戏界面进行调整
@@ -418,13 +423,149 @@ class Robot:
         else:
             print("对战循环完成")
             return True
+        
+    def switch_deck(self, deck_index):
+        """
+        切换到指定索引的卡组
+        假设5个卡组的位置是固定的像素坐标
+        
+        Args:
+            deck_index (int): 卡组索引 (0-4)
+        """
+
+        # 定义5个卡组的位置坐标 (x, y)
+        # 这些坐标需要根据实际游戏界面进行调整
+        deck_positions = [
+            (105, 143),  # 卡组1位置
+            (172, 143),  # 卡组2位置
+            (238, 143),  # 卡组3位置
+            (303, 143),  # 卡组4位置
+            (369, 143)   # 卡组5位置
+        ]
+        
+        if deck_index < 0 or deck_index >= len(deck_positions):
+            print(f"无效的卡组索引: {deck_index}，应为0-4之间")
+            return False
+        
+        # 获取目标卡组位置
+        x, y = deck_positions[deck_index]
+        print(f"切换到卡组 {deck_index + 1}，位置: ({x}, {y})")
+        
+
+        # 点击卡组位置
+        return self.click_position(x, y, radius=2, delay_after=2)
+    
+    def auto_battle_with_deck_switch(self, battles_per_deck=3, check_end_after=5):
+        """
+        带卡组切换功能的自动对战流程
+        
+        Args:
+            battles_per_deck (int): 每个卡组对战次数
+            check_end_after (int): 在释放多少张卡牌后开始检查对战结束
+        
+        Returns:
+            bool: 是否成功完成整个对战流程
+        """
+        print("开始带卡组切换功能的自动对战流程...")
+        
+        # 初始化卡组索引和对战计数器
+        current_deck_index = 0
+        battles_with_current_deck = 0
+        
+        # 主循环
+        try:
+            while True:
+                # 检查是否需要切换卡组
+                if battles_with_current_deck >= battles_per_deck:
+                    print(f"当前卡组已对战 {battles_with_current_deck} 次，需要切换卡组")
+                    
+                    # 进入卡组选择界面的步骤
+                    # 1. 点击卡组按钮 (假设在某个固定位置)
+                    self.click_position(129, 750, radius=2, delay_after=2.0)  # 假设卡组按钮位置
+                    
+                    time.sleep(2)  # 等待界面切换
+                    
+                    # 2. 切换到下一个卡组
+                    current_deck_index = (current_deck_index + 1) % 5  # 循环切换卡组
+                    if not self.switch_deck(current_deck_index):
+                        print(f"切换到卡组 {current_deck_index + 1} 失败")
+                        return False
+                    
+                    time.sleep(2)  # 等待卡组切换
+                    
+                    # 3. 点击确认或返回按钮 (假设在某个固定位置)
+                    self.click_position(270, 73, radius=2, delay_after=3.0)  # 假设确认按钮位置
+                    
+                    # 重置对战计数器
+                    battles_with_current_deck = 0
+                
+                print(f"\n{'='*50}")
+                print(f"使用卡组 {current_deck_index + 1} 开始第 {battles_with_current_deck + 1} 次对战")
+                print(f"{'='*50}")
+                
+                if self.battle_mode == "single":
+                    # 点击主界面
+                    self.click_template("modle/Battle_Interface3.png")
+                    time.sleep(3)
+
+                # 计算动态 check_end_after 值（基于历史平均值）
+                if self.successful_battles > 0:
+                    avg_cards = self.total_cards_played / self.successful_battles
+                    check_end_after = max(5, int(avg_cards * 0.7))  # 使用平均值的70%作为检查点
+                    print(f"基于历史数据，check_end_after 设置为: {check_end_after}")
+                else:
+                    check_end_after = 10  # 默认值
+
+                if self.auto_battle(check_end_after=check_end_after):
+                    self.battle_count += 1
+                    self.successful_battles += 1
+                    self.total_cards_played += self.cards_played_in_battle  # 紫色累加卡牌数
+                    battles_with_current_deck += 1
+                    avg_cards = self.total_cards_played / self.successful_battles
+                    print(f"完成一次对战，本次释放 {self.cards_played_in_battle} 张卡牌")
+                    print(f"平均释放卡牌数: {avg_cards:.2f}")
+                    print("8秒后开始新的对战...")
+                    time.sleep(8)
+                else:
+                    print("对战失败，尝试返回主界面...")
+                    # 对战按钮识别失败后，识别并点击Battle_Interface图像返回主界面
+                    if self.click_template("modle/Battle_Interface.png"):
+                        print("已点击Battle_Interface图像，返回主界面")
+                        continue
+                    
+                    if self.click_template("modle/Battle_Interface2.png", need_capture=False):
+                        print("已点击Battle_Interface2图像，返回主界面")  
+                        continue
+                    
+                    if self.click_template("modle/Reward.png", delay_after=4, click_count=6, need_capture=False):
+                        print("已点击Reward图像，返回主界面")
+                        continue
+
+                    if self.click_template("modle/Return_to_game.png", delay_after=4, need_capture=False):
+                        print("已点击Return_to_game图像，返回主界面")
+                        continue
+
+                    if self.click_template("modle/close.png", need_capture=False):
+                        print("已点击close图像，返回主界面")
+                        continue
+
+                    if self.click_template("modle/confirm2.png", need_capture=False):
+                        print("已点击confirm2图像，返回主界面")
+                        continue
+                    else:
+                        break  # 如果都无法返回主界面，则退出循环
+
+            return True
+        except KeyboardInterrupt:
+            print("程序已手动终止")
+            return False
 
 # 使用示例
 if __name__ == "__main__":
 
 
     # 设置对战模式，"single" 为单人模式，"double" 为双人模式，"defense" 为保卫模式
-    battle_mode = "single"  # 可以根据需要修改为 "single"、"double" 或 "defense"
+    battle_mode = "defense"  # 可以根据需要修改为 "single"、"double" 或 "defense"
     
     # 根据模式设置不同的参数
     if battle_mode == "double":
@@ -440,80 +581,29 @@ if __name__ == "__main__":
     # 创建机器人实例
     robot = Robot(battle_mode=battle_mode, wait_time=wait_time, max_cards=max_cards)
 
-    # 添加统计信息
-    battle_count = 1  # 对战次数
-    start_time = time.time()  # 开始时间
-    total_cards_played = 0  # 总卡牌释放数
-    successful_battles = 0  # 成功对战次数
+    # 添加统计信息初始化
+    robot.battle_count = 1  # 对战次数
+    robot.start_time = time.time()  # 开始时间
+    robot.total_cards_played = 0  # 总卡牌释放数
+    robot.successful_battles = 0  # 成功对战次数
 
-
-    # 自动对战循环
+    # 自动对战循环（带卡组切换功能）
     try:
-        while True:
-            print(f"\n{'='*50}")
-            print(f"开始第 {battle_count} 次对战")
-            print(f"{'='*50}")
-            if battle_mode == "single":
-                # 点击主界面
-                robot.click_template("modle/Battle_Interface3.png")
-                time.sleep(3)
-
-            # 计算动态 check_end_after 值（基于历史平均值）
-            if successful_battles > 0:
-                avg_cards = total_cards_played / successful_battles
-                check_end_after = max(5, int(avg_cards * 0.7))  # 使用平均值的70%作为检查点
-                print(f"基于历史数据，check_end_after 设置为: {check_end_after}")
-            else:
-                check_end_after = 10  # 默认值
-
-            if robot.auto_battle(check_end_after=check_end_after):
-                battle_count += 1
-                successful_battles += 1
-                total_cards_played += robot.cards_played_in_battle  # 累加卡牌数
-                avg_cards = total_cards_played / successful_battles
-                print(f"完成一次对战，本次释放 {robot.cards_played_in_battle} 张卡牌")
-                print(f"平均释放卡牌数: {avg_cards:.2f}")
-                print("8秒后开始新的对战...")
-                time.sleep(8)
-            else:
-                print("对战失败，尝试返回主界面...")
-                # 对战按钮识别失败后，识别并点击Battle_Interface图像返回主界面
-                if robot.click_template("modle/Battle_Interface.png"):
-                    print("已点击Battle_Interface图像，返回主界面")
-                    continue
-                
-                if robot.click_template("modle/Battle_Interface2.png", need_capture=False):
-                    print("已点击Battle_Interface2图像，返回主界面")  
-                    continue
-                
-                if robot.click_template("modle/Reward.png", delay_after=4, click_count=6, need_capture=False):
-                    print("已点击Reward图像，返回主界面")
-                    continue
-
-                if robot.click_template("modle/Return_to_game.png", delay_after=4, need_capture=False):
-                    print("已点击Return_to_game图像，返回主界面")
-                    continue
-
-                if robot.click_template("modle/close.png", need_capture=False):
-                    print("已点击close图像，返回主界面")
-                    continue
-                else:
-                    break  # 如果都无法返回主界面，则退出循环
-
+        # 每个卡组对战3次后切换
+        robot.auto_battle_with_deck_switch(battles_per_deck=1000)
     except KeyboardInterrupt:
         print("程序已手动终止")
     finally:
         # 输出最终统计信息
-        elapsed_time = time.time() - start_time
-        avg_cards_final = total_cards_played / successful_battles if successful_battles > 0 else 0
+        elapsed_time = time.time() - robot.start_time
+        avg_cards_final = robot.total_cards_played / robot.successful_battles if robot.successful_battles > 0 else 0
         print(f"\n{'='*50}")
         print(f"程序运行结束，最终统计信息:")
-        print(f"总对战次数: {battle_count}")
-        print(f"成功对战次数: {successful_battles}")
-        print(f"总卡牌释放数: {total_cards_played}")
+        print(f"总对战次数: {robot.battle_count}")
+        print(f"成功对战次数: {robot.successful_battles}")
+        print(f"总卡牌释放数: {robot.total_cards_played}")
         print(f"平均每次对战释放卡牌数: {avg_cards_final:.2f}")
         print(f"总运行时间: {int(elapsed_time//3600)}小时 {int((elapsed_time%3600)//60)}分钟 {int(elapsed_time%60)}秒")
         print(f"{'='*50}")
-    
 
     pass
